@@ -1,4 +1,4 @@
-"""Offline evidence commands and explicitly selected passive capture."""
+"""Offline evidence commands and explicitly selected live modes."""
 
 import argparse
 import json
@@ -41,25 +41,48 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--output", type=Path, required=True)
     live.add_argument("--duration", type=float, default=60)
     live.add_argument("--count", type=int)
+    active = commands.add_parser("discover", help="bounded, explicitly authorized ISO discovery")
+    active.add_argument("--channel", required=True)
+    active.add_argument("--target", type=int, required=True)
+    active.add_argument("--unique-number", type=int, required=True)
+    active.add_argument("--allow-transmit", action="store_true", required=True)
+    active.add_argument("--hardware", action="store_true")
+    active.add_argument("--isolated-bench", action="store_true")
+    active.add_argument("--output", type=Path, required=True)
+    active.add_argument("--source-address", type=int, default=35)
+    active.add_argument("--manufacturer-code", type=int, default=2046)
+    active.add_argument("--baseline", type=float, default=1.0)
+    active.add_argument("--response-window", type=float, default=2.0)
+    active.add_argument("--interval", type=float, default=1.0)
+    active.add_argument("--recovery", type=float, default=1.0)
+    active.add_argument("--duration", type=float, default=30.0)
     args = parser.parse_args(argv)
-    if args.command == "capture":
-        from .live import LOGGER, capture
+    if args.command in ("capture", "discover"):
+        if args.command == "capture":
+            from .live import LOGGER, capture
+        else:
+            from .discovery import LOGGER, Options, discover
 
         handler = logging.StreamHandler(sys.stderr)
         previous_level = LOGGER.level
         LOGGER.addHandler(handler)
         LOGGER.setLevel(logging.INFO)
         try:
-            summary = capture(
-                args.channel,
-                args.output,
-                listen_only=args.listen_only,
-                duration=args.duration,
-                count=args.count,
-                isolated_bench=args.isolated_bench,
-            )
+            if args.command == "capture":
+                summary = capture(
+                    args.channel,
+                    args.output,
+                    listen_only=args.listen_only,
+                    duration=args.duration,
+                    count=args.count,
+                    isolated_bench=args.isolated_bench,
+                )
+            else:
+                summary = discover(
+                    Options(**{key: value for key, value in vars(args).items() if key != "command"})
+                )
         except (OSError, ValueError, RuntimeError) as exc:
-            print(f"capture failed: {exc}", file=sys.stderr)
+            print(f"{args.command} failed: {exc}", file=sys.stderr)
             return 2
         finally:
             LOGGER.removeHandler(handler)

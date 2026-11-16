@@ -1,7 +1,10 @@
 # Phase 3: passive SocketCAN capture
 
-Phase 3 software and virtual CAN validation are implemented. The physical bench
-smoke test below has **not** been run. No Siren interaction is claimed from vcan.
+Phase 3 software and virtual CAN validation are implemented. The user subsequently
+reported that passive capture on physical `can1` worked after enabling kernel
+listen-only. No raw capture or independent electrical-silence measurements were
+provided for review; those acceptance details remain unverified here. No Siren
+interaction is claimed from vcan.
 
 ## Install and use
 
@@ -118,12 +121,12 @@ A listen-only controller does not provide bus ACKs. On a bench with only a singl
 transmitter, missing ACKs can affect its transmission behavior; silence or retries
 cannot establish Siren application behavior. This procedure does not authorize
 starting an active peer or discovery requests. Those belong to a separate explicit
-hardware-transmission mode in a later phase.
+hardware-transmission mode documented in [phase 4](active-discovery.md).
 
 ## Automated validation
 
 ```sh
-# Default suite never opens any interface (the three integration cases skip):
+# Default suite never opens any interface (all opt-in integration cases skip):
 .venv/bin/python -m pytest -q
 # Explicit opt-in to an already-created virtual CAN interface:
 SIREN_MAPPER_VCAN=vcan0 .venv/bin/python -m pytest -q tests/test_vcan_capture.py

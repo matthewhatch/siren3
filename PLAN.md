@@ -66,7 +66,13 @@ Superseded by the user request to implement phases 0 and 1. Original scope: impl
   `docs/evidence-reports.md` for commands and limits.
 - Phase 3 software implemented: explicit passive SocketCAN capture, fail-closed
   interface checks, exclusive evidence logs/metadata, bounded duration/count,
-  SIGINT/SIGTERM cleanup and real vcan validation. Physical acceptance remains
-  pending the user-run isolated-bench smoke test in `docs/passive-capture.md`.
-- Phases 4 and later remain pending. No transmission or causal experiment
-  correlation has been implemented; no physical CAN interface has been opened.
+  SIGINT/SIGTERM cleanup and real vcan validation. User subsequently reported that
+  passive physical `can1` capture worked after enabling kernel listen-only; raw
+  capture/electrical-silence evidence has not been reviewed here.
+- Phase 4 software implemented: explicit `discover --allow-transmit`, reuse of the
+  simulator address manager, bounded claims and three ISO requests, candidate
+  response/NACK/timeout evidence, immutable raw log/sidecar, baseline and recovery,
+  collision handling and real vcan validation. See `docs/active-discovery.md`.
+  Physical active discovery remains untested; no agent-opened physical interface.
+- Phase 5 and later remain pending. No sensor stimulus scenarios or inferred
+  Siren application-processing results have been implemented.

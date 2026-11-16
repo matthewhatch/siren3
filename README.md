@@ -1,10 +1,11 @@
 # Siren 3 Mapper
 
 Python 3.11+ CLI for offline characterization of an owned Siren 3 Pro.
-Phases 0–2 and phase 3 software are implemented; physical bench acceptance is
-pending. Running without a command prints usage. Offline commands require local
-files and never open a CAN socket. The explicit `capture` command supports passive
-SocketCAN reception only; the mapper never configures interfaces or transmits.
+Phases 0–2 and phases 3–4 software are implemented. Running without a command
+prints usage. Offline commands require local files and never open a CAN socket.
+`capture` is strictly passive; `discover` requires explicit transmit opt-in and
+simulator-managed address claiming. No command configures an interface. Physical
+passive capture was reported successful by the user; physical discovery is untested.
 
 ```sh
 python3 -m venv .venv
@@ -48,9 +49,10 @@ See [phase 0 inventory](docs/phase-0-inventory.md),
 [fixture provenance](fixtures/README.md) and [findings](docs/known-findings.md).
 [Evidence report reference](docs/evidence-reports.md) describes the schema, confidence
 labels and comparison policy. [Passive capture](docs/passive-capture.md) describes
-phase 3 gates and the pending user-run physical smoke test. Real vcan capture and
-signal shutdown have been tested; physical CAN has not been tested. No new Siren
-device interaction is claimed.
+phase 3 gates and its physical smoke-test procedure. [Active discovery](docs/active-discovery.md)
+describes phase 4 setup and evidence. Real vcan capture, discovery and conflict
+handling have been tested. The user reported passive `can1` capture worked; its
+raw capture has not been reviewed here. No physical discovery has been run by this agent.
 
 ## Inventory, compare and report
 
@@ -89,3 +91,28 @@ and a `.json` metadata sidecar use exclusive creation and never overwrite existi
 files. Physical CAN additionally requires an already UP, 250 kbit/s, kernel
 LISTEN-ONLY interface and `--isolated-bench` to attest isolation and verified
 termination. Read the [bench smoke-test procedure](docs/passive-capture.md) first.
+
+## Bounded active discovery
+
+Install the reviewed simulator checkout as a separate package; it supplies address
+management without copying its implementation:
+
+```sh
+.venv/bin/python -m pip install -e '.[hardware]'
+.venv/bin/python -m pip install -e ../nmea2k-sim
+# Explicit virtual test; a responder must be running separately to obtain replies:
+.venv/bin/siren-mapper discover --channel vcan0 --target 5 --unique-number 123456 --allow-transmit --output /tmp/siren-discovery-001.candump
+```
+
+The command claims an available source, then requests PGNs 126996, 126998 and
+126464 once each, with bounded observation windows and capture of all traffic.
+The `.json` sidecar records outcomes, request/response line references, simulator
+module hashes, conflicts, limits and unresolved questions. NACKs and timeouts
+remain observations rather than inferred capability. The combined raw log replays
+through existing inventory/report/diff commands.
+
+Physical discovery also requires `--hardware --isolated-bench`, normal CAN mode
+with kernel LISTEN-ONLY disabled externally, 250 kbit/s, verified termination and
+a legitimately assigned manufacturer identity. The simulator's default unassigned
+2046 identity is blocked on physical CAN. See [active discovery](docs/active-discovery.md)
+for the complete procedure and how to compare a preserved baseline.

@@ -15,7 +15,9 @@ from typing import Any
 LOGGER = logging.getLogger(__name__)
 
 
-def inspect_interface(channel: str, isolated_bench: bool = False) -> dict[str, Any]:
+def inspect_interface(
+    channel: str, isolated_bench: bool = False, *, transmit: bool = False
+) -> dict[str, Any]:
     if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,15}", channel) or channel.startswith("-"):
         raise ValueError("select one explicit Linux interface name")
     try:
@@ -46,7 +48,11 @@ def inspect_interface(channel: str, isolated_bench: bool = False) -> dict[str, A
     if not isinstance(timing, dict) or timing.get("bitrate") != 250000:
         raise ValueError("physical CAN must already be configured at 250000 bit/s")
     modes = data.get("ctrlmode", [])
-    if not isinstance(modes, list) or "LISTEN-ONLY" not in modes:
+    if not isinstance(modes, list):
+        raise ValueError("cannot verify physical CAN controller modes")  # noqa: TRY004
+    if transmit and "LISTEN-ONLY" in modes:
+        raise ValueError("active discovery requires kernel LISTEN-ONLY to be disabled externally")
+    if not transmit and "LISTEN-ONLY" not in modes:
         raise ValueError("physical CAN must already have kernel LISTEN-ONLY enabled")
     if any(mode in modes for mode in ("LOOPBACK", "FD", "FD-NON-ISO", "PRESUME-ACK")):
         raise ValueError("physical capture requires classical CAN without loopback or presume-ack")

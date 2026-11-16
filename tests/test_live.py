@@ -361,3 +361,15 @@ def test_failed_physical_preflight_never_opens_socket_or_output(monkeypatch, tmp
     with pytest.raises(ValueError, match="LISTEN-ONLY"):
         live.capture("can1", tmp_path / "forbidden.log", listen_only=True, isolated_bench=True)
     assert not list(tmp_path.iterdir())
+
+
+def test_active_preflight_preserves_passive_gate(monkeypatch):
+    value = physical()
+    stub_ip(monkeypatch, [value])
+    with pytest.raises(ValueError, match="disabled externally"):
+        live.inspect_interface("can1", True, transmit=True)
+    value["linkinfo"]["info_data"]["ctrlmode"] = []
+    stub_ip(monkeypatch, [value])
+    assert live.inspect_interface("can1", True, transmit=True) == value
+    with pytest.raises(ValueError, match="LISTEN-ONLY"):
+        live.inspect_interface("can1", True)

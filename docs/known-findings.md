@@ -135,3 +135,45 @@ physical acceptance is pending the user-run procedure in `docs/passive-capture.m
 No receive-drop measurement is implemented, and external interface reconfiguration
 is not monitored after preflight; completeness and continued link settings remain
 explicit limitations in capture metadata. Phase 4 transmission remains unimplemented.
+
+## User-reported phase 3 bench follow-up
+
+The user reported that the physical passive-capture procedure worked after
+explicitly enabling kernel LISTEN-ONLY on the Raspberry Pi's `can1`. Their supplied
+interface text before that change showed UP, ERROR-ACTIVE and 250000 bit/s, without
+LISTEN-ONLY. No resulting raw capture, metadata or independent electrical-silence
+measurement was supplied for review. Record this as user-reported operational
+success, not independently verified Siren response/electrical acceptance evidence.
+
+## Phase 4 active discovery validation — 2026-11-16
+
+Implemented explicit bounded `discover --allow-transmit`, reusing the reviewed
+`nmea2k-sim` address manager through an adapter rather than duplicating its claim/
+conflict logic. It suppresses simulator engine telemetry, heartbeat and product/
+PGN-list advertising. Every session records the simulator version and source hashes.
+Physical preflight additionally requires hardware/isolation opt-in, 250000 bit/s,
+normal classical CAN mode, and an assigned identity; unassigned manufacturer 2046
+remains blocked on physical CAN, consistent with the simulator's existing policy.
+
+The scheduler waits for source acquisition before directing one ISO request each
+for 126996, 126998 and 126464. Candidate observations require matching source,
+PGN/destination and an active request window; raw data and NACK/timeouts remain
+separate from assertions about internal processing. Local-process candidates are
+explicitly labeled. Duplicate NAME, address exhaustion, excessive claim traffic,
+source conflicts, cancellation and duration limits are handled conservatively.
+
+Evidence: `tests/test_discovery.py` replays the historical product/list/NACK fixtures
+without opening CAN. `tests/test_vcan_discovery.py` uses a synthetic local peer named
+`VIRTUAL DISCOVERY PEER`, not a physical Siren. Real vcan cases verified three bounded
+queries, Product Information and both advertised lists, configuration NACK, source
+relocation after a lower-NAME collision, acquisition/request spacing, raw evidence
+replay, preserved-baseline comparison and pre-transmit cancellation. Captured TX
+lines mean successful socket submission, not independently confirmed wire delivery.
+
+Validation: `SIREN_MAPPER_VCAN=vcan0 .venv/bin/python -m pytest -q` completed with
+155 passed, including six real vcan cases (three passive, three active). Default
+suite has 149 passing offline cases and six opt-in skips. Ruff lint and formatting
+checks passed. No physical interface was opened or configured by this agent, no
+new Siren responses were collected, and no sensor/configuration stimulus was sent.
+Physical active discovery remains pending; reproduction, identity requirements,
+baseline derivation and interpretation limits are in `docs/active-discovery.md`.
