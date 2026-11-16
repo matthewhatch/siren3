@@ -359,3 +359,131 @@ def test_adapter_suppresses_simulator_discovery_identity(tmp_path, protocol):
     assert len(run.bus.sent) == before
     assert run.manager.provenance["version"]
     assert len(run.manager.provenance["modules"]) == 3
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"hardware": False, "isolated_bench": True},
+        {"hardware": True, "isolated_bench": False},
+        {"hardware": True, "isolated_bench": True, "manufacturer_code": 123},
+    ],
+)
+def test_unassigned_exception_requires_explicit_physical_bench(monkeypatch, tmp_path, changes):
+    options = opts(tmp_path, allow_unassigned_bench_identity=True, **changes)
+    monkeypatch.setattr(
+        discovery, "inspect_interface", lambda *a, **k: pytest.fail("link inspected")
+    )
+    with pytest.raises(ValueError, match="requires --hardware --isolated-bench"):
+        discovery.preflight(options)
+    assert not list(tmp_path.iterdir())
+
+
+def test_unassigned_exception_default_denied_explicit_allowed(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        discovery, "inspect_interface", lambda *a, **k: {"linkinfo": {"info_kind": "can"}}
+    )
+    options = opts(tmp_path, hardware=True, isolated_bench=True)
+    with pytest.raises(ValueError, match="allow-unassigned-bench-identity"):
+        discovery.preflight(options)
+    assert discovery.preflight(replace(options, allow_unassigned_bench_identity=True))
+    monkeypatch.setattr(
+        discovery, "inspect_interface", lambda *a, **k: {"linkinfo": {"info_kind": "vcan"}}
+    )
+    with pytest.raises(ValueError, match="verified physical"):
+        discovery.preflight(replace(options, allow_unassigned_bench_identity=True))
+
+
+def test_unassigned_exception_retains_interface_checks(monkeypatch, tmp_path):
+    from siren_mapper import live
+
+    metadata = {
+        "ifname": "can1",
+        "flags": ["UP"],
+        "linkinfo": {
+            "info_kind": "can",
+            "info_data": {
+                "bittiming": {"bitrate": 250000},
+                "ctrlmode": ["LISTEN-ONLY"],
+                "state": "ERROR-ACTIVE",
+            },
+        },
+    }
+    monkeypatch.setattr(
+        live.subprocess,
+        "run",
+        lambda *a, **k: type("Result", (), {"stdout": json.dumps([metadata])})(),
+    )
+    options = replace(
+        opts(tmp_path, hardware=True, isolated_bench=True, allow_unassigned_bench_identity=True),
+        channel="can1",
+    )
+    monkeypatch.setattr(discovery, "_open_bus", lambda *a: pytest.fail("socket opened"))
+    with pytest.raises(ValueError, match="disabled externally"):
+        discovery.discover(options)
+    metadata["linkinfo"]["info_data"]["ctrlmode"] = []
+    metadata["linkinfo"]["info_data"]["bittiming"]["bitrate"] = 500000
+    with pytest.raises(ValueError, match="250000"):
+        discovery.discover(options)
+    assert not list(tmp_path.iterdir())
+
+
+def test_unassigned_exception_audited_in_metadata(monkeypatch, tmp_path, protocol):
+    options = opts(
+        tmp_path,
+        duration=1,
+        baseline=2,
+        hardware=True,
+        isolated_bench=True,
+        allow_unassigned_bench_identity=True,
+    )
+    monkeypatch.setattr(
+        discovery, "inspect_interface", lambda *a, **k: {"linkinfo": {"info_kind": "can"}}
+    )
+    bus = Bus()
+    bus.recv = lambda timeout: None
+    monkeypatch.setattr(discovery, "_open_bus", lambda *a: bus)
+    ticks = iter(i * 0.25 for i in range(30))
+    monkeypatch.setattr(discovery.time, "monotonic", lambda: next(ticks))
+    result = discovery.discover(options)
+    assert result["manufacturer_code"] == 2046
+    assert result["allow_unassigned_bench_identity"] is True
+    assert result["identity_status"] == "unassigned_isolated_bench_exception"
+    assert result["hardware_selected"] and result["isolated_bench_attested"]
+    assert json.loads(Path(str(options.output) + ".json").read_text()) == result
+    assert not bus.sent
+
+
+def test_cli_unassigned_exception_is_explicit_and_forwarded(monkeypatch, tmp_path, capsys):
+    seen = []
+
+    def fake_discover(options):
+        options.validate()
+        seen.append(options)
+        return {"allow_unassigned_bench_identity": options.allow_unassigned_bench_identity}
+
+    monkeypatch.setattr(discovery, "discover", fake_discover)
+    assert (
+        main(
+            [
+                "discover",
+                "--channel",
+                "can1",
+                "--target",
+                "5",
+                "--unique-number",
+                "123457",
+                "--hardware",
+                "--isolated-bench",
+                "--allow-transmit",
+                "--manufacturer-code",
+                "2046",
+                "--allow-unassigned-bench-identity",
+                "--output",
+                str(tmp_path / "cli.log"),
+            ]
+        )
+        == 0
+    )
+    assert seen[0].allow_unassigned_bench_identity is True
+    assert json.loads(capsys.readouterr().out)["allow_unassigned_bench_identity"] is True

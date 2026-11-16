@@ -34,6 +34,7 @@ class Options:
     isolated_bench: bool = False
     source_address: int = 35
     manufacturer_code: int = 2046
+    allow_unassigned_bench_identity: bool = False
     baseline: float = 1.0
     response_window: float = 2.0
     interval: float = 1.0
@@ -50,7 +51,14 @@ class Options:
         if not 1 <= self.unique_number <= 0x1FFFFF:
             raise ValueError("unique number must be 1–2097151")
         if not (1 <= self.manufacturer_code <= 2044 or self.manufacturer_code == 2046):
-            raise ValueError("manufacturer code must be 1–2044, or 2046 for vcan only")
+            raise ValueError("manufacturer code must be 1–2044, or 2046 for explicit bench testing")
+        if self.allow_unassigned_bench_identity and (
+            not self.hardware or not self.isolated_bench or self.manufacturer_code != 2046
+        ):
+            raise ValueError(
+                "--allow-unassigned-bench-identity requires --hardware --isolated-bench "
+                "and --manufacturer-code 2046"
+            )
         for key, low, high in (
             ("baseline", 0.2, 10),
             ("response_window", 0.2, 10),
@@ -69,9 +77,11 @@ def preflight(options: Options) -> dict[str, Any]:
     if link["linkinfo"]["info_kind"] == "can":
         if not options.hardware:
             raise ValueError("physical transmission additionally requires --hardware")
-        if options.manufacturer_code == 2046:
+        if options.manufacturer_code == 2046 and not options.allow_unassigned_bench_identity:
             raise ValueError(
-                "unassigned manufacturer 2046 is virtual-only; use an assigned identity"
+                "unassigned manufacturer 2046 is virtual-only by default; explicitly select "
+                "--allow-unassigned-bench-identity with --hardware --isolated-bench "
+                "for this isolated bench"
             )
     elif options.hardware:
         raise ValueError("--hardware requires a verified physical CAN link; omit it for vcan")
@@ -373,6 +383,14 @@ def discover(options: Options) -> dict[str, Any]:
         "isolated_bench_attested": options.isolated_bench,
         "unique_number": options.unique_number,
         "manufacturer_code": options.manufacturer_code,
+        "allow_unassigned_bench_identity": options.allow_unassigned_bench_identity,
+        "identity_status": (
+            "unassigned_isolated_bench_exception"
+            if options.allow_unassigned_bench_identity
+            else "unassigned_virtual"
+            if options.manufacturer_code == 2046
+            else "operator_supplied_manufacturer_code"
+        ),
         "started_utc": datetime.now(UTC).isoformat(),
         "stop_reason": "startup_error",
         "requests": [],

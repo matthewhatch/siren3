@@ -113,6 +113,9 @@ through existing inventory/report/diff commands.
 
 Physical discovery also requires `--hardware --isolated-bench`, normal CAN mode
 with kernel LISTEN-ONLY disabled externally, 250 kbit/s, verified termination and
-a legitimately assigned manufacturer identity. The simulator's default unassigned
-2046 identity is blocked on physical CAN. See [active discovery](docs/active-discovery.md)
-for the complete procedure and how to compare a preserved baseline.
+an assigned manufacturer identity by default. For the existing unassigned 2046
+identity on the owned isolated bench, additionally select
+`--manufacturer-code 2046 --allow-unassigned-bench-identity`. That exception is
+recorded in metadata and retains all interface, claiming and rate checks. See
+[active discovery](docs/active-discovery.md) for the complete procedure and how to
+compare a preserved baseline.

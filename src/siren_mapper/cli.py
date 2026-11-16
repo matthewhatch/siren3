@@ -47,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     active.add_argument("--unique-number", type=int, required=True)
     active.add_argument("--allow-transmit", action="store_true", required=True)
     active.add_argument("--hardware", action="store_true")
+    active.add_argument(
+        "--allow-unassigned-bench-identity",
+        action="store_true",
+        help="permit manufacturer 2046 only with --hardware --isolated-bench",
+    )
     active.add_argument("--isolated-bench", action="store_true")
     active.add_argument("--output", type=Path, required=True)
     active.add_argument("--source-address", type=int, default=35)

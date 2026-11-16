@@ -28,12 +28,16 @@ The adapter inherits the simulator NAME's class 50/function 140 engine profile;
 it does not send engine telemetry or advertise simulator Product/PGN lists.
 This identity profile must be considered when interpreting a black-box experiment.
 
-Default manufacturer 2046 is the simulator's unassigned **virtual-only** test
-identity. Physical discovery retains the simulator's restriction against that
-identity: supply a manufacturer code legitimately assigned for the node you are
-operating, within 1–2044. Selecting somebody else's number is not an allocation.
-If an appropriate physical identity is unavailable, remain on vcan. The mapper
-never supplies a fictitious assigned code or clones the Siren's NAME.
+Default manufacturer 2046 is the simulator's **unassigned** test identity. By
+default it is rejected on physical CAN. The mapper now permits a narrowly scoped
+exception with `--allow-unassigned-bench-identity`, only when all of
+`--hardware --isolated-bench --allow-transmit --manufacturer-code 2046` are selected.
+This permits the existing test identity on the owned isolated bench; it does not
+make that identity assigned or certified. The simulator package's own physical-TX
+policy is unchanged. Without the explicit exception, physical discovery requires
+an operator-supplied assigned code within 1–2044. Never substitute an arbitrary
+manufacturer's number or clone the Siren's NAME. The exception is recorded in the
+session metadata and does not bypass bitrate, mode, claiming, collision or rate checks.
 
 ## Virtual use
 
@@ -57,7 +61,8 @@ with the same ISO NAME. Source address alone does not define identity.
 
 Use only the owned, isolated, correctly terminated 250 kbit/s bench, separated
 from all operational vessel networks. Confirm wiring, termination measurement,
-power, adapter mode and distinct assigned identity before proceeding. These are
+power, adapter mode and distinct identity before proceeding. Use an assigned
+identity or explicitly select the unassigned-2046 isolated-bench exception. These are
 physical operator checks; `--isolated-bench` records your attestation.
 
 The passive phase left `can1` in kernel LISTEN-ONLY. Active discovery requires
@@ -73,7 +78,8 @@ ip -json -details link show dev can1
 ```
 
 Use real operator-supplied identity values below; the shell placeholders are
-intentionally not prefilled. The command refuses the default 2046 on physical CAN.
+intentionally not prefilled. The command refuses the default 2046 on physical CAN
+unless the explicit bench exception is selected.
 
 ```sh
 mkdir -p captures
@@ -84,6 +90,23 @@ mkdir -p captures
   --unique-number "$DISTINCT_UNIQUE_NUMBER" \
   --output captures/discovery-001.candump
 ```
+
+For your existing unassigned-2046 bench setup, keep the simulator process stopped
+for this discovery run and use a distinct unique number:
+
+```sh
+.venv/bin/siren-mapper discover \
+  --channel can1 --hardware --isolated-bench --allow-transmit \
+  --manufacturer-code 2046 --allow-unassigned-bench-identity \
+  --unique-number "$DISTINCT_UNIQUE_NUMBER" \
+  --target 5 --source-address 35 \
+  --output captures/discovery-002.candump
+```
+
+Use an unused output name. Do not reuse a running simulator's full NAME; duplicate
+NAME detection will stop discovery even when the source addresses differ. The
+exception flag is rejected without explicit hardware/isolation mode or with a
+manufacturer code other than 2046. It does not affect passive capture.
 
 The command never configures interfaces. Preflight requires an exact UP physical
 CAN link at 250000 bit/s, a usable controller state, no LISTEN-ONLY/LOOPBACK/FD/

@@ -177,3 +177,21 @@ checks passed. No physical interface was opened or configured by this agent, no
 new Siren responses were collected, and no sensor/configuration stimulus was sent.
 Physical active discovery remains pending; reproduction, identity requirements,
 baseline derivation and interpretation limits are in `docs/active-discovery.md`.
+
+## Phase 4 unassigned bench-identity exception
+
+User-provided CLI output showed physical discovery stopping at the manufacturer's
+2046 guard before CAN startup. Added explicit `--allow-unassigned-bench-identity`
+for this owned isolated-bench workflow. It is accepted only for code 2046 with
+hardware/isolation/transmit opt-in and a verified physical CAN link. The default
+physical rejection remains; all link, bitrate, claiming, collision, timing and
+transmit-count gates remain in force. Session metadata records the exception and
+labels the identity `unassigned_isolated_bench_exception`; it is not represented
+as an assigned/certified identity. No simulator repository policy was modified.
+
+Validation: 156 offline tests passed; six opt-in vcan cases skipped for this
+follow-up. Ruff lint/format checks passed. New tests cover default rejection,
+explicit acceptance, incomplete flag combinations, wrong manufacturer, vcan
+rejection of the hardware exception, retained kernel-mode/bitrate checks, metadata
+audit and CLI forwarding. No physical interface was opened and no hardware test
+was run for this change. Updated Pi procedure is in `docs/active-discovery.md`.

@@ -74,5 +74,8 @@ Superseded by the user request to implement phases 0 and 1. Original scope: impl
   response/NACK/timeout evidence, immutable raw log/sidecar, baseline and recovery,
   collision handling and real vcan validation. See `docs/active-discovery.md`.
   Physical active discovery remains untested; no agent-opened physical interface.
+  An explicit `--allow-unassigned-bench-identity` exception permits the existing
+  manufacturer-2046 identity only with hardware/isolation/transmit opt-in; defaults
+  continue to reject it on physical CAN and all other safety gates remain enforced.
 - Phase 5 and later remain pending. No sensor stimulus scenarios or inferred
   Siren application-processing results have been implemented.
