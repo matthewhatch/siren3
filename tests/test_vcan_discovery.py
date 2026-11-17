@@ -66,7 +66,7 @@ def test_virtual_discovery_candidates_and_baseline_diff(virtual_channel, tmp_pat
     import can
     from nmea_sim import device_protocol as p
     from nmea_sim.can_id import compose, extract
-    from nmea_sim.device import Device, Transmission
+    from nmea_sim.device import TX_PGNS, Device, Transmission
 
     peer = Device(p.Name(unique_number=42, manufacturer_code=2046), preferred_address=5)
     peer.product = p.ProductInformation(
@@ -153,21 +153,33 @@ def test_virtual_discovery_candidates_and_baseline_diff(virtual_channel, tmp_pat
         assert run.returncode == 0, run.stderr
         result = json.loads(run.stdout)
         assert result["stop_reason"] == "complete"
-        assert result["tx_frames"] <= 5
+        assert result["tx_frames"] <= 6
         assert [request["status"] for request in result["requests"]] == [
+            "response_observed",
             "response_observed",
             "acknowledgement_observed",
             "response_observed",
         ]
         assert (
-            result["requests"][0]["observations"][0]["decoded"]["model"] == "VIRTUAL DISCOVERY PEER"
+            result["requests"][1]["observations"][0]["decoded"]["model"] == "VIRTUAL DISCOVERY PEER"
         )
-        assert result["requests"][1]["observations"][0]["kind"] == "nack"
-        assert [request[0] for request in seen_requests] == [126996, 126998, 126464]
+        assert result["requests"][2]["observations"][0]["kind"] == "nack"
+        assert [request[0] for request in seen_requests] == [60928, 126996, 126998, 126464]
         assert all(b[2] - a[2] >= 0.99 for a, b in pairwise(seen_requests))
         if collide:
             assert result["final_source"] != 35
             assert any(event["kind"] == "source_conflict" for event in result["events"])
+        from siren_mapper.profiles import load_profile, profile_from_capture
+
+        fingerprint = load_profile(Path(result["profile"]))
+        assert profile_from_capture(output, target=5) == fingerprint
+        assert fingerprint["session"]["stop_reason"] == "complete"
+        target = next(d for d in fingerprint["devices"] if d["identity"]["name_hex"])
+        assert target["identity"]["name_hex"] == f"{peer.name.value:016x}"
+        assert target["product"]["fields"]["model"] == "VIRTUAL DISCOVERY PEER"
+        assert target["configuration"]["status"] == "request_not_accepted"
+        assert target["advertised_pgns"]["transmit"]["pgns"] == list(TX_PGNS)
+        assert target["advertised_pgns"]["receive"]["pgns"]
         assert result["sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
         assert json.loads(Path(str(output) + ".json").read_text()) == result
         decoded = read_capture(output)

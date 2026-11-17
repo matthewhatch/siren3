@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     diff.add_argument("baseline", type=Path)
     diff.add_argument("stimulus", type=Path)
     live = commands.add_parser("capture", help="explicit passive SocketCAN capture")
-    live.add_argument("--channel", required=True)
+    live.add_argument("--channel", "--interface", dest="channel", required=True)
     live.add_argument("--listen-only", action="store_true", required=True)
     live.add_argument(
         "--isolated-bench",
@@ -53,10 +53,15 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--duration", type=float, default=60)
     live.add_argument("--count", type=int)
     active = commands.add_parser("discover", help="bounded, explicitly authorized ISO discovery")
-    active.add_argument("--channel", required=True)
-    active.add_argument("--target", type=int, required=True)
-    active.add_argument("--unique-number", type=int, required=True)
-    active.add_argument("--allow-transmit", action="store_true", required=True)
+    active.add_argument("--channel", "--interface", dest="channel")
+    active.add_argument("--capture", type=Path)
+    active.add_argument("--profile-output", type=Path)
+    active.add_argument("--format", choices=("json", "markdown", "human"), default="json")
+    active.add_argument("--target", type=int)
+    active.add_argument("--unique-number", type=int)
+    active.add_argument(
+        "--allow-transmit", "--allow-tx", dest="allow_transmit", action="store_true"
+    )
     active.add_argument("--hardware", action="store_true")
     active.add_argument(
         "--allow-unassigned-bench-identity",
@@ -64,19 +69,34 @@ def main(argv: list[str] | None = None) -> int:
         help="permit manufacturer 2046 only with --hardware --isolated-bench",
     )
     active.add_argument("--isolated-bench", action="store_true")
-    active.add_argument("--output", type=Path, required=True)
+    active.add_argument("--output", type=Path)
     active.add_argument("--source-address", type=int, default=35)
     active.add_argument("--manufacturer-code", type=int, default=2046)
+    for name, default in (
+        ("device-instance", 0),
+        ("device-function", 140),
+        ("device-class", 50),
+        ("system-instance", 0),
+        ("industry-group", 4),
+    ):
+        active.add_argument("--" + name, type=int, default=default)
     active.add_argument("--baseline", type=float, default=1.0)
     active.add_argument("--response-window", type=float, default=2.0)
     active.add_argument("--interval", type=float, default=1.0)
     active.add_argument("--recovery", type=float, default=1.0)
     active.add_argument("--duration", type=float, default=30.0)
+    active.add_argument("--count", type=int, help="frame limit for passive mode only")
     for live_parser in (live, active):
         live_parser.add_argument("--human", action="store_true")
         live_parser.add_argument("--verbose", action="store_true")
         live_parser.add_argument("--raw", action="store_true")
+    from .device_commands import add_commands, execute
+
+    add_commands(commands)
     args = parser.parse_args(argv)
+    result = execute(args, parser)
+    if result is not None:
+        return result
     human = any(getattr(args, key, False) for key in ("human", "verbose", "raw"))
     if args.command == "replay" or (args.command == "decode" and human):
         from .interpreter import replay
@@ -124,7 +144,16 @@ def main(argv: list[str] | None = None) -> int:
                     **{
                         key: value
                         for key, value in vars(args).items()
-                        if key not in ("command", "human", "verbose", "raw")
+                        if key
+                        not in (
+                            "command",
+                            "human",
+                            "verbose",
+                            "raw",
+                            "capture",
+                            "format",
+                            "count",
+                        )
                     }
                 )
                 summary = (
@@ -140,6 +169,15 @@ def main(argv: list[str] | None = None) -> int:
             LOGGER.setLevel(previous_level)
             if view is not None:
                 human_status = view.finish()
+        if args.command == "discover" and "profile" in summary:
+            from .device_commands import print_profile
+            from .profiles import load_profile
+
+            if human:
+                print_profile(load_profile(Path(summary["profile"])), "human", output=sys.stderr)
+            elif args.format != "json":
+                print_profile(load_profile(Path(summary["profile"])), args.format)
+                return human_status
         print(
             json.dumps(summary, sort_keys=True, indent=2), file=sys.stderr if human else sys.stdout
         )

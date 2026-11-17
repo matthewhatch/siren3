@@ -105,7 +105,9 @@ def interpretation(event: PacketEvent) -> str:
             "access_denied": "Access denied acknowledgement",
         }[decoded["result"]]
         target = decoded["requested_pgn"]
-        return f"{label} for {pgn_name(target)} (PGN {target})."
+        return f"{label} for {pgn_name(target)} (PGN {target})." + (
+            " Request not accepted." if decoded["result"] == "nack" else ""
+        )
     if pgn == 60928:
         return "Address claim observed; address ownership is unverified."
     if pgn == 126464:

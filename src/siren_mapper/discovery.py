@@ -40,6 +40,13 @@ class Options:
     interval: float = 1.0
     recovery: float = 1.0
     duration: float = 30.0
+    request_name: bool = True
+    profile_output: Path | None = None
+    device_instance: int = 0
+    device_function: int = 140
+    device_class: int = 50
+    system_instance: int = 0
+    industry_group: int = 4
 
     def validate(self) -> None:
         if not self.allow_transmit:
@@ -59,6 +66,15 @@ class Options:
                 "--allow-unassigned-bench-identity requires --hardware --isolated-bench "
                 "and --manufacturer-code 2046"
             )
+        for key, maximum in (
+            ("device_instance", 255),
+            ("device_function", 255),
+            ("device_class", 127),
+            ("system_instance", 15),
+            ("industry_group", 7),
+        ):
+            if not 0 <= getattr(self, key) <= maximum:
+                raise ValueError(f"{key} must be 0–{maximum}")
         for key, low, high in (
             ("baseline", 0.2, 10),
             ("response_window", 0.2, 10),
@@ -131,6 +147,7 @@ class Session:
         self.lines = 0
         self.tx_count = 0
         self.target_name: int | None = None
+        self.queries = list(QUERY_PGNS)
 
     def record(self, message: Any) -> int:
         line = format_frame(message, self.options.channel)
@@ -219,6 +236,16 @@ class Session:
             if self.target_name is not None and name != self.target_name:
                 raise ValueError("target address NAME changed during discovery")
             self.target_name = name
+        if (
+            ident.pgn == 60928
+            and ident.destination == 255
+            and len(data) == 8
+            and ident.source != self.options.target
+            and self.target_name is not None
+            and int.from_bytes(data, "little") == self.target_name
+        ):
+            self.event("target_name_moved", now, new_source=ident.source)
+            raise ValueError(f"target NAME moved to source {ident.source}; rerun with that target")
         if self.claim_started:
             previous = self.manager.address
             was_owned = self.manager.owns_address
@@ -301,6 +328,8 @@ class Session:
         if not self.claim_started:
             self.event("baseline_complete", now, final_line=self.lines)
             self.claim_started = True
+            if self.options.request_name and self.target_name is None:
+                self.queries.insert(0, 60928)
             self.manager.reserve(self.options.target)
             self.claims(self.manager.start(now), now)
             self.event("claim_started", now, source=self.manager.address)
@@ -327,16 +356,17 @@ class Session:
                 request["status"] = "acknowledgement_observed"
             else:
                 request["status"] = "timeout"
+            LOGGER.info("PGN %s: %s", request["pgn"], request["status"])
             self.event("request_window_complete", now, pgn=request["pgn"], status=request["status"])
             self.pending = None
             self.assembler = Reassembler()
         if (
             self.pending is None
-            and len(self.requests) < len(QUERY_PGNS)
+            and len(self.requests) < len(self.queries)
             and self.manager.owns_address
             and now - self.last_request >= self.options.interval
         ):
-            pgn = QUERY_PGNS[len(self.requests)]
+            pgn = self.queries[len(self.requests)]
             source = self.manager.address
             line = self.transmit(59904, pgn.to_bytes(3, "little"), source, self.options.target, now)
             request = {
@@ -346,12 +376,14 @@ class Session:
                 "sent_elapsed_seconds": now - self.started,
                 "deadline": now + self.options.response_window,
                 "request_line": line,
+                "target_name": f"{self.target_name:016x}" if self.target_name is not None else None,
                 "status": "pending",
                 "observations": [],
             }
+            LOGGER.info("Request PGN %s: source %s -> target %s", pgn, source, self.options.target)
             self.requests.append(request)
             self.pending, self.last_request = request, now
-        if len(self.requests) == len(QUERY_PGNS) and self.pending is None:
+        if len(self.requests) == len(self.queries) and self.pending is None:
             if self.recovery_end is None:
                 self.recovery_end = now + self.options.recovery
                 self.event("recovery_started", now)
@@ -364,7 +396,14 @@ def discover(
 ) -> dict[str, Any]:
     link = preflight(options)
     manager = AddressManager(
-        options.manufacturer_code, options.unique_number, options.source_address
+        options.manufacturer_code,
+        options.unique_number,
+        options.source_address,
+        device_instance=options.device_instance,
+        device_function=options.device_function,
+        device_class=options.device_class,
+        system_instance=options.system_instance,
+        industry_group=options.industry_group,
     )
     summary: dict[str, Any] = {
         "schema_version": 1,
@@ -382,7 +421,7 @@ def discover(
             "response_window": options.response_window,
             "interval": options.interval,
             "recovery": options.recovery,
-            "max_requests": 3,
+            "max_requests": 4 if options.request_name else 3,
             "max_claims": 20,
             "max_claims_per_second": 4,
         },
@@ -416,6 +455,8 @@ def discover(
     session: Session | None = None
     started = time.monotonic()
     sidecar = Path(str(options.output) + ".json")
+    profile_path = options.profile_output or Path(str(options.output) + ".profile.json")
+    profile_streams = []
     with sidecar.open("x", encoding="utf-8") as metadata:
 
         def stop(signum: int, _frame: Any) -> None:
@@ -424,6 +465,10 @@ def discover(
         try:
             with options.output.open("xb") as stream:
                 summary["capture_created"] = True
+                # Refuse derived-artifact collisions before opening a CAN socket.
+                for path in (profile_path, Path(str(profile_path) + ".md")):
+                    profile_streams.append(path.open("x", encoding="utf-8"))
+                summary["profile_reserved"] = True
                 for signum in (signal.SIGINT, signal.SIGTERM):
                     handlers[signum] = signal.signal(signum, stop)
                 bus = _open_bus(options.channel)
@@ -497,5 +542,27 @@ def discover(
                             summary["sha256"] = hashlib.file_digest(raw, "sha256").hexdigest()
                     except OSError as exc:
                         summary["hash_error"] = str(exc)
+                if summary.get("profile_reserved"):
+                    try:
+                        from .profiles import profile_from_capture, profile_markdown
+
+                        profile = profile_from_capture(
+                            options.output,
+                            target=options.target,
+                            response_window=options.response_window,
+                            session=summary,
+                        )
+                        profile_streams[0].write(
+                            json.dumps(profile, sort_keys=True, indent=2) + "\n"
+                        )
+                        profile_streams[1].write(profile_markdown(profile))
+                        summary["profile"] = str(profile_path)
+                        summary["profile_markdown"] = str(profile_path) + ".md"
+                    except (OSError, ValueError) as exc:
+                        summary["profile_error"] = str(exc)
+                for profile_stream in profile_streams:
+                    profile_stream.close()
                 metadata.write(json.dumps(summary, sort_keys=True, indent=2) + "\n")
+    if "profile_error" in summary:
+        raise RuntimeError(f"profile export failed: {summary['profile_error']}")
     return summary

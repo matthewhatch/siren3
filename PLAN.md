@@ -26,10 +26,20 @@ A repeatable Python CLI that ingests SocketCAN candump logs, decodes NMEA 2000 f
 - Avoid reconfiguring interfaces automatically without user opt-in.
 - Acceptance: tests with vcan, plus user-run isolated-bench smoke test; passive mode never transmits.
 
-## Phase 4 — Active discovery (1–2 days)
-- Integrate with existing simulator's source-address management; do not send from unclaimed address.
-- Query Product Information (126996), Configuration (126998), TX/RX PGN List (126464); document NACK/timeouts.
-- Acceptance: explicit `--allow-transmit`, bounded request count and intervals, proper address management, vcan tests, reproducible capture compared against baseline.
+## Phase 4 — Core NMEA 2000 device discovery and fingerprinting
+- Follow the expanded November 17 Notion core workflow before sensor or wireless expansion.
+- Passively observe devices/source addresses/NAME and recent PGNs; select an explicit target.
+- Reuse the simulator source-address manager, detect duplicates/conflicts, and claim before requests.
+- Obtain target NAME with a directed 60928 request when baseline observation has not supplied it.
+- Query Product (126996), Configuration (126998), and distinct advertised TX/RX lists (126464).
+- Correlate candidate responses with request/source/destination/NAME/time evidence; distinguish NACK,
+  timeout, incomplete capture, conflicting replies and unknown data without inferring internal processing.
+- Persist immutable raw evidence plus versioned JSON profiles and Markdown; compare NAME identity and
+  source-address movement separately. Support passive `devices`, offline `discover --capture`, and
+  `profile show`/`profile diff`, integrated with the existing human live interpreter.
+- Acceptance: recorded Siren fingerprint regression; unknown/malformed/missing/collision/duplicate
+  fixtures; bounded explicitly authorized TX with configurable identity; vcan end-to-end profiles.
+  Physical can1 acceptance requires user-run capture evidence and remains unverified here.
 
 ## Phase 4a - Packet Interpreter
 Read the updated Siren 3 Mapper implementation plan in Notion.
@@ -74,7 +84,7 @@ Do not introduce any new CAN transmission behavior for this feature.
 ## Original first-task note
 Superseded by the user request to implement phases 0 and 1. Original scope: implement Phase 1 only. Review AGENTS.md and docs/known-findings.md. Scaffold typed Python package and pytest fixtures; no live CAN connections or transmission. Return test commands, decoded product fields, and open protocol questions.
 
-## Implementation status — 2026-11-16
+## Implementation status — 2026-11-17
 
 - Phase 0 complete: simulator architecture/dependency review and reported bench
   boundaries in `docs/phase-0-inventory.md`; transcribed, hashed fixtures and
@@ -108,5 +118,11 @@ Superseded by the user request to implement phases 0 and 1. Original scope: impl
   options, complete fast-packet summaries, read-only engine/fluid interpretation,
   explicit anomalies/unknowns, and live/replay equivalence tests. See
   `docs/packet-interpreter.md`. No new CAN transmission behavior was introduced.
-- Phase 5 and later remain pending. No sensor stimulus scenarios or inferred
+- Core discovery/fingerprinting expansion implemented: passive device inventory, read-only discovery
+  default, offline capture reproduction, conditional target NAME acquisition, configurable mapper NAME,
+  request/response correlation, exclusive JSON/Markdown profile persistence and identity-aware diffs.
+  Recorded Siren fixtures and generic virtual-peer workflows pass. See `docs/device-discovery.md`.
+  No physical CAN acceptance is claimed. This is the current core application priority.
+- Phase 5 and later remain pending; additional sensor simulation and wireless reconnaissance are
+  deferred behind the complete discovery workflow and evidence-backed physical acceptance. No sensor stimulus scenarios or inferred
   Siren application-processing results have been implemented.

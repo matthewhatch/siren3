@@ -1,0 +1,4 @@
+# Synthetic timestamps; a missing response is distinct from NACK.
+(1.000000) can1 18EEFF05#FFFF5F8100AB8CC0 R
+(2.000000) can1 18EA0523#16F001 T
+(5.000000) can1 1DF01105#60EAE0CCFFFFFFFF R

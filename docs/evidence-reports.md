@@ -115,3 +115,15 @@ live `capture`/`discover` human options. It uses the same packet decode pipeline
 see [packet interpreter](packet-interpreter.md). JSON remains the default for all
 pre-existing commands. Sensor PGNs 127488/127489/127505 are now supported read-only,
 so their complete payloads are decoded rather than labeled unknown.
+
+## Discovery fingerprints
+
+The core [device discovery workflow](device-discovery.md) builds a separate
+`kind: nmea2000_device_profiles`, schema-version-1 snapshot from this same evidence
+pipeline. Use `devices`, `discover --capture`, `profile show` and `profile diff`.
+It retains raw provenance, NAME versus mutable source history, per-request timing,
+Configuration rejection/timeouts and distinct advertised TX/RX lists. Active runs
+save JSON/Markdown automatically and retain a concise recorded-session context;
+raw capture/session metadata remain separate. Fingerprint comparison ignores
+capture-path/timestamp differences and does not match source-only unknowns across
+runs. Profiles do not infer sensor or wireless capabilities from advertised PGNs.

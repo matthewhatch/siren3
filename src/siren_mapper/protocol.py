@@ -62,7 +62,8 @@ def _decode_discovery(pgn: int, data: bytes) -> dict[str, Any]:
             **{field: name >> offset & ((1 << bits) - 1) for field, offset, bits in fields},
         }
     if pgn == 126996:
-        _length(data, 134)
+        if len(data) not in (132, 134):
+            raise ValueError(f"expected 132 or 134 product payload bytes, got {len(data)}")
         result: dict[str, Any] = {}
         for field, offset in [("nmea_version", 0), ("product_code", 2)]:
             value = int.from_bytes(data[offset : offset + 2], "little")
@@ -74,8 +75,8 @@ def _decode_discovery(pgn: int, data: bytes) -> dict[str, Any]:
             ("serial", 100),
         ]:
             result[field] = _text(data[offset : offset + 32])
-        result["certification_level"] = data[132] if data[132] < 253 else None
-        result["load_equivalency"] = data[133] if data[133] < 253 else None
+        result["certification_level"] = data[132] if len(data) == 134 and data[132] < 253 else None
+        result["load_equivalency"] = data[133] if len(data) == 134 and data[133] < 253 else None
         return result
     if pgn == 126464:
         if not data or data[0] not in (0, 1) or (len(data) - 1) % 3:

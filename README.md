@@ -7,6 +7,10 @@ prints usage. Offline commands require local files and never open a CAN socket.
 simulator-managed address claiming. No command configures an interface. Physical
 passive capture was reported successful by the user; physical discovery is untested.
 
+The core workflow now includes passive node inventory, offline/live fingerprinting,
+and versioned device profiles. Start with [device discovery](docs/device-discovery.md).
+Sensor simulation and wireless reconnaissance remain deferred.
+
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
@@ -141,3 +145,24 @@ fragments remain pending until completion, and errors remain visible without
 terminating live capture. The original seven-byte heartbeat is malformed, with
 its interval/sequence shown only as a labeled known prefix. See the
 [interpreter reference](docs/packet-interpreter.md) for fields, examples and validation.
+
+## Device discovery and fingerprints
+
+```sh
+# Reproduce the recorded Siren fingerprint, entirely offline:
+.venv/bin/siren-mapper discover --capture fixtures/siren-fingerprint.candump --target 5 --profile-output /tmp/siren-fingerprint-001.json --format human
+.venv/bin/siren-mapper profile show /tmp/siren-fingerprint-001.json
+# Passive inventory on an already configured isolated listen-only bench:
+.venv/bin/siren-mapper devices --interface can1 --isolated-bench --duration 75 --output captures/devices-001.candump
+# Compare saved snapshots by NAME, separating source movement from content:
+.venv/bin/siren-mapper profile diff profiles/baseline.json profiles/current.json
+```
+
+`discover --capture` never transmits. Live `discover` is also passive without explicit
+`--allow-transmit`/`--allow-tx`; identity/hardware transmit options require that flag.
+An active run requests NAME if unobserved, then Product, Configuration and the two
+PGN-list roles after address acquisition. Its raw log, session metadata and
+`.profile.json`/`.profile.json.md` are preserved. `--human --verbose --raw` integrates
+packet interpretation; NACKs mean **request not accepted**, not blank configuration.
+See [the complete workflow and Pi procedure](docs/device-discovery.md) for gates,
+identity configuration, outcome meanings and limitations.

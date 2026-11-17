@@ -1,5 +1,8 @@
 # Phase 4: bounded active discovery
 
+The expanded core workflow, passive devices, offline discovery and profile commands
+are documented in [device discovery and fingerprinting](device-discovery.md).
+
 Software is implemented and tested on virtual CAN. Physical discovery on the
 Raspberry Pi/`can1` has **not** been run by this agent. The user's successful passive
 capture report does not establish active discovery behavior.
@@ -24,8 +27,9 @@ or require this package.
 `--unique-number` is required and must be distinct from every other node using
 the same manufacturer/NAME profile on the bench (1–2097151). It is an explicit
 identity choice, not a copied Siren serial or automatically reused simulator NAME.
-The adapter inherits the simulator NAME's class 50/function 140 engine profile;
-it does not send engine telemetry or advertise simulator Product/PGN lists.
+The adapter defaults to the simulator NAME's class 50/function 140 engine profile;
+instance/function/class/system/industry fields can now be explicitly configured.
+It does not send engine telemetry or advertise simulator Product/PGN lists.
 This identity profile must be considered when interpreting a black-box experiment.
 
 Default manufacturer 2046 is the simulator's **unassigned** test identity. By
@@ -140,18 +144,19 @@ configuration writes, group functions, pairing or sensor/alarm injection are sen
    losing conflicts relocate and pause requests. Duplicate NAME or address
    exhaustion stops discovery. A request interrupted by loss/reassertion of its
    source becomes `inconclusive_address_change`; it is not retried.
-3. Send exactly one directed ISO Request per PGN, in order: Product Information
+3. If the baseline has not revealed the target NAME, first send a directed ISO
+   Request for 60928 (`00EE00`). Then send one directed request per PGN: Product Information
    126996, Configuration 126998, PGN List 126464. Listen for a full response window
    (default 2 seconds) for each; start requests at least 1 second apart. Both list
    functions must be observed for the PGN-list outcome to be complete.
 4. Receive a recovery period (default 1 second) with no further discovery requests.
    Address-management replies may still occur to maintain safe ownership.
 
-Limits: three discovery requests, at most 20 claim frames, at most four claims in
+Limits: at most four discovery requests (three with a baseline NAME), at most 20 claim frames, at most four claims in
 any rolling second, and at most 24 total frames. A claim-rate/budget violation
 stops instead of queuing unbounded work. The overall duration defaults to 30 seconds
 and is capped at 60. Duration expiry may leave some requests unsent; examine the
-metadata rather than assuming all three ran. `--baseline`, `--response-window`
+metadata rather than assuming every query ran. `--baseline`, `--response-window`
 and `--recovery` accept 0.2–10 seconds; `--interval` accepts 1–10; `--duration`
 accepts 1–60. All values must be finite. Requests are never automatically retried.
 
@@ -246,7 +251,7 @@ SIREN_MAPPER_VCAN=vcan0 .venv/bin/python -m pytest -q
 Default tests open no CAN sockets. Opt-in vcan tests reject physical links before
 opening or sending. A separate virtual peer, labeled `VIRTUAL DISCOVERY PEER`,
 returns synthetic Product Information, a configuration NACK and two PGN lists.
-Integration cases verify all three queries, >=250 ms acquisition delay, request
+Integration cases verify NAME acquisition and all three information queries, >=250 ms acquisition delay, request
 spacing, relocation after a lower-NAME conflict, clean cancellation before claim,
 raw replay and a reproducible baseline diff. The existing passive-vcan cases also
 run. These are software observations, not new physical Siren results.
@@ -255,3 +260,10 @@ Layouts and socket behavior were checked against the reviewed simulator sources,
 [CANboat discovery definitions](https://canboat.github.io/canboat/canboat.html) and
 [python-can Bus API](https://python-can.readthedocs.io/en/stable/bus.html). Passing
 these tests is not a claim of complete NMEA certification or physical acceptance.
+
+The core workflow additionally saves `<output>.profile.json` and
+`<output>.profile.json.md`, reserving those artifacts before opening an active
+socket. `--profile-output` overrides that profile path. Offline reproduction uses
+`discover --capture FILE`; profile snapshots can be inspected and compared through
+`profile show`/`profile diff`. See [device discovery](device-discovery.md) for full
+identity/correlation semantics and the recorded regression fingerprint.

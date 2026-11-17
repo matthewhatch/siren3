@@ -167,3 +167,11 @@ Sources: the linked Notion addition, existing immutable fixture inventory, revie
 [CANboat's PGN definitions](https://canboat.github.io/canboat/canboat.html)
 for layouts, scales and enum labels. Reverse-engineered definitions and software
 validation do not establish NMEA certification or new device interaction.
+
+The [core discovery expansion](device-discovery.md) now uses the same live display
+while optionally acquiring target NAME and writing versioned device fingerprints.
+Its final human fingerprint summary goes to stderr after packet display; normal
+`devices`/offline profile summaries can be printed without packet output. NACK
+interpretation also explicitly says **Request not accepted**. These additions do
+not change the passive interpreter into a transmitter; only the separately gated
+active discovery mode can submit queries.

@@ -15,6 +15,10 @@ Build a local-first Python CLI for non-destructive, black-box characterization o
 - Python 3.11+ target for development, typed code, pytest, ruff. Minimize dependencies; `python-can` for SocketCAN, standard library for persistence initially.
 - Repo has a CLI (`siren-mapper`), offline fixtures, protocol decoder, discovery parser, test runner, and export. SQLite optional later.
 - Use existing NMEA 2000 simulator as a separate process or adapter; do not copy/reimplement its existing functionality until reviewing its repository.
+- Prioritize complete NMEA device discovery/fingerprinting and preserved profiles
+  before additional sensor simulation or wireless reconnaissance.
+- Treat NAME claims separately from mutable source-address/location history;
+  match candidate replies to captured requests and never infer timing for untimed snippets.
 - Prefer small documented PRs, deterministic tests, and no speculative UI.
 - Human live/replay output and structured evidence use the shared `PacketDecoder`,
   PGN registry, and reassembler. New formatters must not introduce CAN transmission.

@@ -8,7 +8,18 @@ from typing import Any
 
 
 class AddressManager:
-    def __init__(self, manufacturer: int, unique_number: int, preferred: int):
+    def __init__(
+        self,
+        manufacturer: int,
+        unique_number: int,
+        preferred: int,
+        *,
+        device_instance: int = 0,
+        device_function: int = 140,
+        device_class: int = 50,
+        system_instance: int = 0,
+        industry_group: int = 4,
+    ):
         try:
             from nmea_sim.can_id import compose
             from nmea_sim.device import CLAIM_WAIT, Device
@@ -31,7 +42,15 @@ class AddressManager:
                 {"file": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
             )
         self.device = Device(
-            Name(unique_number=unique_number, manufacturer_code=manufacturer),
+            Name(
+                unique_number=unique_number,
+                manufacturer_code=manufacturer,
+                device_instance=device_instance,
+                device_function=device_function,
+                device_class=device_class,
+                system_instance=system_instance,
+                industry_group=industry_group,
+            ),
             preferred_address=preferred,
         )
 

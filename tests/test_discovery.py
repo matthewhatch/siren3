@@ -22,7 +22,14 @@ def protocol():
 
 
 def opts(tmp_path, **changes):
-    return Options("vcan0", tmp_path / "active.log", 5, 123456, allow_transmit=True, **changes)
+    return Options(
+        "vcan0",
+        tmp_path / "active.log",
+        5,
+        123456,
+        allow_transmit=True,
+        **{"request_name": False, **changes},
+    )
 
 
 class Bus:
@@ -511,3 +518,84 @@ def test_human_display_does_not_change_discovery_transmissions(tmp_path, protoco
     saved = io.StringIO()
     assert replay(file, saved) == 0
     assert saved.getvalue() == displayed.getvalue()
+
+
+def test_core_workflow_queries_unknown_name_before_product(tmp_path, protocol):
+    run = session(tmp_path, request_name=True)
+    run.advance(1)
+    run.advance(1.25)
+    assert run.requests[0]["pgn"] == 60928
+    assert bytes(run.bus.sent[-1].data) == bytes.fromhex("00EE00")
+    run.receive(message(0x18EEFF05, bytes.fromhex("FFFF5F8100AB8CC0")), 1.3)
+    run.advance(3.25)
+    assert run.requests[0]["status"] == "response_observed"
+    assert run.requests[1]["pgn"] == 126996
+    assert run.requests[1]["target_name"] == "c08cab00815fffff"
+    assert run.requests[0]["observations"][0]["decoded"]["manufacturer_code"] == 1034
+
+
+def test_core_baseline_name_skips_redundant_name_request(tmp_path, protocol):
+    run = session(tmp_path, request_name=True)
+    run.receive(message(0x18EEFF05, bytes.fromhex("FFFF5F8100AB8CC0")), 0.5)
+    run.advance(1)
+    run.advance(1.25)
+    assert run.requests[0]["pgn"] == 126996
+    assert len(run.queries) == 3
+
+
+def test_profile_collision_prevents_bus_open(monkeypatch, tmp_path, protocol):
+    options = opts(tmp_path)
+    protected = Path(str(options.output) + ".profile.json.md")
+    protected.write_text("Existing evidence")
+    monkeypatch.setattr(discovery, "preflight", lambda o: {"linkinfo": {"info_kind": "vcan"}})
+    monkeypatch.setattr(discovery, "_open_bus", lambda *a: pytest.fail("socket opened"))
+    with pytest.raises(RuntimeError):
+        discovery.discover(options)
+    assert protected.read_text() == "Existing evidence"
+
+
+def test_target_name_moving_stops_instead_of_probing_replacement(tmp_path, protocol):
+    run = session(tmp_path)
+    run.receive(message(0x18EEFF05, bytes.fromhex("FFFF5F8100AB8CC0")), 0.5)
+    acquired(run)
+    count = len(run.bus.sent)
+    with pytest.raises(ValueError, match="target NAME moved to source 6"):
+        run.receive(message(0x18EEFF06, bytes.fromhex("FFFF5F8100AB8CC0")), 1.4)
+    assert len(run.bus.sent) == count
+
+
+def test_configurable_identity_uses_simulator_name_layout(tmp_path, protocol):
+    manager = AddressManager(
+        2046,
+        123457,
+        35,
+        device_instance=42,
+        device_function=130,
+        device_class=25,
+        system_instance=3,
+        industry_group=4,
+    )
+    from siren_mapper.protocol import decode_payload
+
+    fields = decode_payload(60928, manager.name.to_bytes(8, "little"))
+    assert fields["device_instance_lower"] == 2
+    assert fields["device_instance_upper"] == 5
+    assert fields["device_function"] == 130
+    assert fields["device_class"] == 25
+    assert fields["system_instance"] == 3 and fields["industry_group"] == 4
+    assert fields["arbitrary_address_capable"] == 1
+
+
+@pytest.mark.parametrize(
+    "field,invalid",
+    [
+        ("device_instance", 256),
+        ("device_function", -1),
+        ("device_class", 128),
+        ("system_instance", 16),
+        ("industry_group", 8),
+    ],
+)
+def test_identity_field_validation_before_socket(tmp_path, field, invalid):
+    with pytest.raises(ValueError):
+        opts(tmp_path, **{field: invalid}).validate()

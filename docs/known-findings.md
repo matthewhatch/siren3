@@ -232,3 +232,54 @@ registry extension, timing/order, no offline sockets, and identical discovery TX
 frames with/without human display. Ruff lint/format checks passed. No physical CAN
 interface was opened or tested for this phase, and no new Siren interaction is
 claimed. Commands and interpretation limits are in `docs/packet-interpreter.md`.
+
+## Core device discovery and fingerprinting — 2026-11-17
+
+Reviewed the updated Notion section “NMEA 2000 Device Discovery & Fingerprinting”
+(page `41acdfe6-c4fa-81c6-bace-e7d30d66e884`). Implemented it as a reusable core
+workflow: passive `devices`, passive-by-default live `discover`, offline
+`discover --capture`, configurable mapper NAME fields, conditional directed NAME
+acquisition, and exclusive versioned JSON/Markdown profile persistence. Existing
+source claiming/conflict handling, physical mode/identity checks, bounded request
+counts and human live interpretation remain in use. Sensor/wireless expansion
+remains deferred.
+
+The new `fixtures/siren-fingerprint.candump` is a curated regression ordering of
+36 original November 16 CAN ID/data pairs: NAME claims, Product request/reply,
+Configuration request/NACK, and PGN-list request/two role lists. It is not a newly
+collected continuous session. No capture timestamps/directions were invented;
+correlation is explicitly order-only/timing unknown. Original fixture files and
+the seven-byte heartbeat anomaly remain unchanged. Synthetic unknown, malformed,
+missing-configuration, collision and duplicate/unexpected fixtures are separately
+labeled and hashed in `fixtures/README.md`.
+
+Regression reproduces NAME `c08cab00815fffff`, unique number 2097151, manufacturer
+code 1034, instance lower/upper 0/0, function 171, class 70, industry 4 and arbitrary
+address capability 1 directly from NAME bitfields. It also reproduces product code
+13939, database version 3100, model `Siren 3 Pro`, software `1.0.0`, serial 21003942,
+certification field 2, LEN 1, and both advertised lists already recorded above.
+These are decoded wire observations, not vendor lookup guesses or certification
+of this mapper. The configuration NACK is explicitly “request not accepted,” with
+control 1/raw bytes preserved, distinct from a completed timeout or an untimed
+capture with no response observed.
+
+Profiles retain request/source/destination/NAME references, raw hex, exact capture
+timestamps, line numbers, source hashes, session limits/stop state and uncertainty.
+A verified matching live sidecar reproduces its monotonic window qualification
+without treating local echo as a remote response. Conflicting/duplicate/late or
+wrong-source replies remain visible. NAME identity, current source/location,
+source history and content changes are compared separately. Earlier source-only
+unknown epochs are not retroactively assigned to a later NAME; unknown identities
+are not matched across runs by address alone. Interrupted windows remain
+inconclusive even when a complete payload was observed before interruption.
+
+Validation: 222 tests passed with explicit `SIREN_MAPPER_VCAN=vcan0`, including
+eight real vcan cases. Default suite: 214 passed, eight opt-in skips. Virtual peer
+cases now verify target NAME acquisition before the three information queries,
+Product and configuration NACK, separate TX/RX lists, source collision relocation,
+JSON/Markdown output and exact equality of persisted live profiles with offline
+reconstruction. CLI smoke checks saved/showed/diffed the recorded Siren fingerprint.
+Ruff lint and format checks passed. No physical interface was opened/configured by
+this agent; no new Siren interaction was collected. Physical end-to-end acceptance
+requires user-run evidence and remains unverified. Procedure and scope limits are
+in `docs/device-discovery.md` and the updated repository plan.
