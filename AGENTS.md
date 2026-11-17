@@ -16,6 +16,10 @@ Build a local-first Python CLI for non-destructive, black-box characterization o
 - Repo has a CLI (`siren-mapper`), offline fixtures, protocol decoder, discovery parser, test runner, and export. SQLite optional later.
 - Use existing NMEA 2000 simulator as a separate process or adapter; do not copy/reimplement its existing functionality until reviewing its repository.
 - Prefer small documented PRs, deterministic tests, and no speculative UI.
+- Human live/replay output and structured evidence use the shared `PacketDecoder`,
+  PGN registry, and reassembler. New formatters must not introduce CAN transmission.
+- Keep validated fields separate from partial malformed-message fields; never turn
+  unknown/proprietary bytes into speculative text or device-processing claims.
 - Verify all CAN identifiers with 29-bit extended CAN bitfields; ISO requests and fast-packet parsing require tests.
 - Read `PLAN.md` and `docs/known-findings.md` before implementation. Work one phase at a time.
 - For protocol decoding, use `.agents/skills/nmea2000-protocol-analysis/SKILL.md`; for transmission tests use `can-experiment-design`; for analyzing capture files use `can-capture-analysis`.

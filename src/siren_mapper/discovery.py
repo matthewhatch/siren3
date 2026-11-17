@@ -113,10 +113,12 @@ class Session:
         started: float,
         stopped: list[str],
         clock: Callable[[], float] | None = None,
+        on_frame: Callable[[str, int], None] | None = None,
     ):
         self.options, self.bus, self.manager, self.stream = options, bus, manager, stream
         self.started, self.stopped = started, stopped
         self.clock = clock or time.monotonic
+        self.on_frame = on_frame
         self.assembler = Reassembler()
         self.baseline_end = started + options.baseline
         self.last_request = -math.inf
@@ -131,9 +133,12 @@ class Session:
         self.target_name: int | None = None
 
     def record(self, message: Any) -> int:
-        self.stream.write(format_frame(message, self.options.channel).encode("ascii"))
+        line = format_frame(message, self.options.channel)
+        self.stream.write(line.encode("ascii"))
         self.stream.flush()
         self.lines += 1
+        if self.on_frame is not None:
+            self.on_frame(line, self.lines)
         return self.lines
 
     def event(self, kind: str, now: float, **fields: Any) -> None:
@@ -354,7 +359,9 @@ class Session:
         return False
 
 
-def discover(options: Options) -> dict[str, Any]:
+def discover(
+    options: Options, *, on_frame: Callable[[str, int], None] | None = None
+) -> dict[str, Any]:
     link = preflight(options)
     manager = AddressManager(
         options.manufacturer_code, options.unique_number, options.source_address
@@ -421,7 +428,9 @@ def discover(options: Options) -> dict[str, Any]:
                     handlers[signum] = signal.signal(signum, stop)
                 bus = _open_bus(options.channel)
                 started = time.monotonic()
-                session = Session(options, bus, manager, stream, started, stopped)
+                session = Session(
+                    options, bus, manager, stream, started, stopped, on_frame=on_frame
+                )
                 LOGGER.info("Discovery baseline on %s; stop with Ctrl-C", options.channel)
                 while not stopped:
                     now = time.monotonic()

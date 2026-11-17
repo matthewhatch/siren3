@@ -31,6 +31,32 @@ A repeatable Python CLI that ingests SocketCAN candump logs, decodes NMEA 2000 f
 - Query Product Information (126996), Configuration (126998), TX/RX PGN List (126464); document NACK/timeouts.
 - Acceptance: explicit `--allow-transmit`, bounded request count and intervals, proper address management, vcan tests, reproducible capture compared against baseline.
 
+## Phase 4a - Packet Interpreter
+Read the updated Siren 3 Mapper implementation plan in Notion.
+
+Add a human-readable packet interpreter to the existing application.
+
+The interpreter must work in both live SocketCAN mode and offline capture replay.
+
+For each CAN frame, display:
+- Timestamp and TX/RX direction
+- Source and destination addresses
+- PGN number and descriptive name
+- Decoded fields with meaningful labels and units
+- A concise plain-English interpretation
+
+Support `--verbose` and `--raw` options.
+
+For NMEA fast-packet messages, reconstruct the complete message and produce a decoded summary.
+
+Use our previously captured Siren 3 Pro messages as test fixtures. Ensure unknown and proprietary data are identified without speculative decoding.
+
+Reuse the existing decoding infrastructure rather than creating a separate interpreter.
+
+Implement automated tests demonstrating consistent output between live capture and offline replay.
+
+Do not introduce any new CAN transmission behavior for this feature.
+
 ## Phase 5 — Controlled sensor experiments (2–3 days)
 - Reuse simulator for PGN 127488, 127489 and 127505; create normal-to-abnormal scenarios with conservative bounds and single-variable changes.
 - Baseline capture, stimulus, recovery, and post-stimulus capture. Record sent frames, observation window and all Siren-originating traffic.
@@ -77,5 +103,10 @@ Superseded by the user request to implement phases 0 and 1. Original scope: impl
   An explicit `--allow-unassigned-bench-identity` exception permits the existing
   manufacturer-2046 identity only with hardware/isolation/transmit opt-in; defaults
   continue to reject it on physical CAN and all other safety gates remain enforced.
+- Phase 4a implemented against the November 17 Notion interpreter addition:
+  shared incremental decoder/registry, human replay and live display, raw/verbose
+  options, complete fast-packet summaries, read-only engine/fluid interpretation,
+  explicit anomalies/unknowns, and live/replay equivalence tests. See
+  `docs/packet-interpreter.md`. No new CAN transmission behavior was introduced.
 - Phase 5 and later remain pending. No sensor stimulus scenarios or inferred
   Siren application-processing results have been implemented.

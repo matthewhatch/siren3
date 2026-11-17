@@ -1,8 +1,12 @@
 """Discovery layouts checked against CANboat; unknown bytes remain available."""
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-FAST_PGNS = frozenset({126464, 126996, 126998})
+from . import sensors
+
+FAST_PGNS: set[int] = set()
 
 
 def requested_pgn(data: bytes) -> int:
@@ -24,7 +28,7 @@ def _text(data: bytes) -> str | None:
     return text or None
 
 
-def decode_payload(pgn: int, data: bytes) -> dict[str, Any]:
+def _decode_discovery(pgn: int, data: bytes) -> dict[str, Any]:
     if pgn == 59904:
         return {"requested_pgn": requested_pgn(data)}
     if pgn == 59392:
@@ -83,8 +87,8 @@ def decode_payload(pgn: int, data: bytes) -> dict[str, Any]:
     if pgn == 126993:
         _length(data, 8)
         return {
-            "interval_ms": int.from_bytes(data[:2], "little"),
-            "sequence": data[2],
+            "interval_ms": sensors.quantity(int.from_bytes(data[:2], "little"), 16),
+            "sequence": sensors.quantity(data[2], 8),
             "controller1": data[3] & 3,
             "controller2": data[3] >> 2 & 3,
             "equipment_status": data[3] >> 4 & 3,
@@ -114,3 +118,86 @@ def decode_payload(pgn: int, data: bytes) -> dict[str, Any]:
             raise ValueError("trailing configuration bytes")
         return result
     return {"unknown_payload_hex": data.hex()}
+
+
+@dataclass(frozen=True)
+class PgnDefinition:
+    name: str
+    decoder: Callable[[bytes], dict[str, Any]] | None = None
+    fast_packet: bool = False
+
+
+PGNS: dict[int, PgnDefinition] = {}
+
+
+def register_pgn(pgn: int, definition: PgnDefinition) -> None:
+    requested_pgn(pgn.to_bytes(3, "little"))
+    PGNS[pgn] = definition
+    if definition.fast_packet:
+        FAST_PGNS.add(pgn)
+    else:
+        FAST_PGNS.discard(pgn)
+
+
+def is_proprietary(pgn: int) -> bool:
+    return pgn in (61184, 126720) or 65280 <= pgn <= 65535 or 130816 <= pgn <= 131071
+
+
+def pgn_name(pgn: int) -> str:
+    definition = PGNS.get(pgn)
+    return (
+        definition.name
+        if definition
+        else "Proprietary data"
+        if is_proprietary(pgn)
+        else "Unknown PGN"
+    )
+
+
+def decode_payload(pgn: int, data: bytes) -> dict[str, Any]:
+    definition = PGNS.get(pgn)
+    if definition is None or definition.decoder is None:
+        return {"unknown_payload_hex": data.hex()}
+    return definition.decoder(data)
+
+
+def partial_payload(pgn: int, data: bytes) -> dict[str, Any]:
+    # An anomalous single-frame heartbeat still has a known three-byte prefix.
+    # Never present this as a complete validated heartbeat or pad its tail.
+    if pgn == 126993 and 3 <= len(data) < 8:
+        return {
+            "interval_ms": sensors.quantity(int.from_bytes(data[:2], "little"), 16),
+            "sequence": sensors.quantity(data[2], 8),
+        }
+    return {}
+
+
+for _pgn, _name in {
+    59392: "ISO Acknowledgement",
+    59904: "ISO Request",
+    60928: "ISO Address Claim",
+    126464: "PGN List",
+    126993: "Heartbeat",
+    126996: "Product Information",
+    126998: "Configuration Information",
+}.items():
+    register_pgn(
+        _pgn,
+        PgnDefinition(
+            _name,
+            lambda data, pgn=_pgn: _decode_discovery(pgn, data),
+            _pgn in (126464, 126996, 126998),
+        ),
+    )
+for _pgn, _name, _decoder, _fast in (
+    (127488, "Engine Parameters, Rapid Update", sensors.rapid, False),
+    (127489, "Engine Parameters, Dynamic", sensors.dynamic, True),
+    (127505, "Fluid Level", sensors.fluid, False),
+):
+    register_pgn(_pgn, PgnDefinition(_name, _decoder, _fast))
+for _pgn, _name in {
+    60160: "ISO Transport Protocol, Data Transfer",
+    60416: "ISO Transport Protocol, Connection Management",
+    126208: "NMEA Group Function",
+}.items():
+    register_pgn(_pgn, PgnDefinition(_name, fast_packet=_pgn == 126208))

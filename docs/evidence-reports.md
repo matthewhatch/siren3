@@ -49,6 +49,9 @@ Arbitrary capture text cannot introduce Markdown tables or active HTML there.
 - `provenance` in each record: path, hash and all constituent line numbers.
 - `status`: `decoded`, `unknown` (unsupported PGN), or `malformed` (complete payload
   failed validation). Incomplete assemblies have diagnostics but no decoded record.
+- `partial_decoded`, when present: separately labeled known-prefix fields from a
+  malformed heartbeat. Its status remains `malformed`; these are never substituted
+  for a validated complete payload or used to fill missing bytes.
 - `classification`: `decoded_fact` only after layout validation; otherwise
   `unknown`. No hypotheses are generated automatically.
 - `confidence`: `supported` means a successful offline wire-layout decode;
@@ -106,3 +109,9 @@ Hardware tests (physical CAN and vcan) were not run for this phase. Automated te
 exercise deterministic output, exact provenance, malformed/incomplete evidence,
 identity separation, comparisons, CLI exit status, source-file preservation and
 socket-access prevention. Existing phase 1 protocol regression tests remain enabled.
+
+Human text output is now available through `decode --human`, `replay`, and explicit
+live `capture`/`discover` human options. It uses the same packet decode pipeline;
+see [packet interpreter](packet-interpreter.md). JSON remains the default for all
+pre-existing commands. Sensor PGNs 127488/127489/127505 are now supported read-only,
+so their complete payloads are decoded rather than labeled unknown.

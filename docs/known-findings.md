@@ -195,3 +195,40 @@ explicit acceptance, incomplete flag combinations, wrong manufacturer, vcan
 rejection of the hardware exception, retained kernel-mode/bitrate checks, metadata
 audit and CLI forwarding. No physical interface was opened and no hardware test
 was run for this change. Updated Pi procedure is in `docs/active-discovery.md`.
+
+## Phase 4a packet interpreter — 2026-11-17
+
+Implemented the human-output contract from the Notion implementation plan's
+November 17 addition (page `41acdfe6-c4fa-81c6-bace-e7d30d66e884`) and local phase
+4a. Shared `PacketDecoder`/PGN registration/reassembly now serves structured
+evidence, offline human replay and live display. `decode --human`, `replay`, and
+human/verbose/raw options on existing capture/discovery commands introduce no
+new CAN transmission behavior. Engine/fluid layouts are read-only additions;
+no phase 5 sensor stimulus is implemented.
+
+Original raw fixtures retain their recorded bytes and hashes. Product lines
+1–20 produce exactly one completed Product Information summary, with 19 pending
+fragment lines. Both advertised PGN-list roles and the configuration NACK are
+explicitly named. The existing seven-byte heartbeat remains malformed; only
+its known prefix is separately displayed as interval 60000 ms and sequence 225,
+without padding or decoding missing tail fields. Structured evidence keeps those
+prefix fields under `partial_decoded`, never as validated complete `decoded` data.
+The interval is reported in the payload; recurrence still requires timestamps.
+
+`fixtures/interpreter-synthetic.candump` contains 11 explicitly synthetic frames
+for complete heartbeats/counters, 1200 RPM, signed dynamic engine values/status,
+fluid level/capacity, and unknown/proprietary/transport examples. Its hash and
+provenance are in `fixtures/README.md`. These are decoding vectors, not additional
+Siren observations. Engine flags describe reported wire bits, not verified Siren
+fault recognition. Unknown vendor bytes are never decoded as arbitrary text.
+
+Validation: 192 tests passed with explicit `SIREN_MAPPER_VCAN=vcan0`, including
+eight real vcan cases. The default suite passed 184 offline cases with eight
+opt-in skips. New virtual receive-only cases compare live stdout exactly against
+saved-file replay in both summary and verbose/raw modes and verify no mapper TX
+at a separate peer. Offline tests cover all four formatting combinations,
+scales/signedness/sentinels/enums/reserved bytes, fragmented/malformed/unknown data,
+registry extension, timing/order, no offline sockets, and identical discovery TX
+frames with/without human display. Ruff lint/format checks passed. No physical CAN
+interface was opened or tested for this phase, and no new Siren interaction is
+claimed. Commands and interpretation limits are in `docs/packet-interpreter.md`.

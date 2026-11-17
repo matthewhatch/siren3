@@ -8,6 +8,7 @@ import re
 import signal
 import subprocess
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,7 @@ def capture(
     duration: float = 60,
     count: int | None = None,
     isolated_bench: bool = False,
+    on_frame: Callable[[str, int], None] | None = None,
 ) -> dict[str, Any]:
     if not listen_only:
         raise ValueError("capture requires explicit --listen-only")
@@ -163,6 +165,8 @@ def capture(
                     stream.write(line)
                     stream.flush()
                     summary["frames"] += 1
+                    if on_frame is not None:
+                        on_frame(line.decode("ascii"), summary["frames"])
                     if (
                         message.is_fd
                         or message.is_error_frame

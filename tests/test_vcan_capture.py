@@ -114,3 +114,51 @@ def test_real_vcan_signal_stop_without_traffic(vcan_channel, tmp_path, signum):
         if process.poll() is None:
             process.kill()
             process.communicate(timeout=2)
+
+
+@pytest.mark.parametrize("details", [[], ["--verbose", "--raw"]])
+def test_real_vcan_human_matches_saved_replay_no_tx(vcan_channel, tmp_path, details):
+    import io
+
+    from siren_mapper.interpreter import replay
+
+    can = pytest.importorskip("can")
+    output = tmp_path / "human.candump"
+    product = Path(__file__).parents[1] / "fixtures/product.candump"
+    payloads = [
+        (0x19F01405, bytes.fromhex(line.split("#")[1])) for line in product.read_text().splitlines()
+    ]
+    payloads += [
+        (0x09F200DB, bytes.fromhex("00C012FFFFFCFFFF")),
+        (0x1DF01105, bytes.fromhex("60EAE0CCFFFFFFFF")),
+    ]
+    with can.Bus(
+        interface="socketcan", channel=vcan_channel, ignore_config=True, receive_own_messages=False
+    ) as peer:
+        process = start_capture(
+            vcan_channel, output, "--human", "--count", str(len(payloads)), *details
+        )
+        try:
+            for identifier, data in payloads:
+                peer.send(
+                    can.Message(
+                        arbitration_id=identifier, data=data, is_extended_id=True, check=True
+                    ),
+                    timeout=0.1,
+                )
+            displayed, diagnostic = process.communicate(timeout=3)
+            assert process.returncode == 0, diagnostic
+            saved = io.StringIO()
+            assert (
+                replay(output, saved, verbose="--verbose" in details, raw="--raw" in details) == 0
+            )
+            assert displayed == saved.getvalue()
+            assert displayed.count("Product information message observed") == 1
+            assert 'Model="Siren 3 Pro"' in displayed
+            assert "Engine speed=1200 RPM" in displayed
+            assert "Interval=60000 ms (60 s)" in displayed
+            assert peer.recv(timeout=0.1) is None
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=2)

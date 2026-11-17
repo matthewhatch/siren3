@@ -90,7 +90,7 @@ def test_malformed_and_incomplete_raw_evidence(tmp_path):
 
 
 def test_unknown_and_anomaly_are_unresolved(tmp_path):
-    unknown = write_capture(tmp_path, "unknown.log", "can1 09F20023#000000FFFFFFFFFF\n")
+    unknown = write_capture(tmp_path, "unknown.log", "can1 09F30023#000000FFFFFFFFFF\n")
     record = unknown["records"][0]
     assert record["status"] == "unknown"
     assert record["classification"] == "unknown"

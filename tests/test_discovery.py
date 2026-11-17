@@ -487,3 +487,27 @@ def test_cli_unassigned_exception_is_explicit_and_forwarded(monkeypatch, tmp_pat
     )
     assert seen[0].allow_unassigned_bench_identity is True
     assert json.loads(capsys.readouterr().out)["allow_unassigned_bench_identity"] is True
+
+
+def test_human_display_does_not_change_discovery_transmissions(tmp_path, protocol):
+    from siren_mapper.interpreter import HumanInterpreter, replay
+
+    displayed = io.StringIO()
+    view = HumanInterpreter(displayed)
+    with_view = session(tmp_path)
+    with_view.on_frame = view.feed_line
+    without_view = session(tmp_path)
+    for run in (with_view, without_view):
+        acquired(run)
+        for now in (3.25, 5.25, 7.25, 8.25):
+            run.advance(now)
+    assert [(m.arbitration_id, bytes(m.data)) for m in with_view.bus.sent] == [
+        (m.arbitration_id, bytes(m.data)) for m in without_view.bus.sent
+    ]
+    assert len(with_view.bus.sent) == 4
+    assert view.finish() == 0
+    file = tmp_path / "tx.log"
+    file.write_bytes(with_view.stream.getvalue())
+    saved = io.StringIO()
+    assert replay(file, saved) == 0
+    assert saved.getvalue() == displayed.getvalue()

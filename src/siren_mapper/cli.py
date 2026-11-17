@@ -20,9 +20,20 @@ def decode_file(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="NMEA 2000 capture evidence (offline by default)")
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("decode", "inventory", "report"):
+    for command in ("decode", "inventory", "report", "replay"):
         subparser = commands.add_parser(command, help=f"{command} a local candump file")
         subparser.add_argument("log", type=Path)
+        if command in ("decode", "replay"):
+            subparser.add_argument("--human", action="store_true")
+            subparser.add_argument("--verbose", action="store_true")
+            subparser.add_argument("--raw", action="store_true")
+        if command == "replay":
+            subparser.add_argument(
+                "--speed",
+                type=float,
+                default=0,
+                help="timestamp playback rate; 0 = no delays (default)",
+            )
         if command == "report":
             subparser.add_argument("--format", choices=("markdown", "json"), default="json")
     diff = commands.add_parser(
@@ -61,13 +72,38 @@ def main(argv: list[str] | None = None) -> int:
     active.add_argument("--interval", type=float, default=1.0)
     active.add_argument("--recovery", type=float, default=1.0)
     active.add_argument("--duration", type=float, default=30.0)
+    for live_parser in (live, active):
+        live_parser.add_argument("--human", action="store_true")
+        live_parser.add_argument("--verbose", action="store_true")
+        live_parser.add_argument("--raw", action="store_true")
     args = parser.parse_args(argv)
+    human = any(getattr(args, key, False) for key in ("human", "verbose", "raw"))
+    if args.command == "replay" or (args.command == "decode" and human):
+        from .interpreter import replay
+
+        try:
+            return replay(
+                args.log,
+                sys.stdout,
+                verbose=args.verbose,
+                raw=args.raw,
+                speed=getattr(args, "speed", 0),
+            )
+        except (OSError, ValueError, UnicodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     if args.command in ("capture", "discover"):
         if args.command == "capture":
             from .live import LOGGER, capture
         else:
             from .discovery import LOGGER, Options, discover
 
+        view = None
+        if human:
+            from .interpreter import HumanInterpreter
+
+            view = HumanInterpreter(sys.stdout, verbose=args.verbose, raw=args.raw)
+        human_status = 0
         handler = logging.StreamHandler(sys.stderr)
         previous_level = LOGGER.level
         LOGGER.addHandler(handler)
@@ -81,10 +117,20 @@ def main(argv: list[str] | None = None) -> int:
                     duration=args.duration,
                     count=args.count,
                     isolated_bench=args.isolated_bench,
+                    on_frame=view.feed_line if view is not None else None,
                 )
             else:
-                summary = discover(
-                    Options(**{key: value for key, value in vars(args).items() if key != "command"})
+                options = Options(
+                    **{
+                        key: value
+                        for key, value in vars(args).items()
+                        if key not in ("command", "human", "verbose", "raw")
+                    }
+                )
+                summary = (
+                    discover(options, on_frame=view.feed_line)
+                    if view is not None
+                    else discover(options)
                 )
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"{args.command} failed: {exc}", file=sys.stderr)
@@ -92,8 +138,12 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             LOGGER.removeHandler(handler)
             LOGGER.setLevel(previous_level)
-        print(json.dumps(summary, sort_keys=True, indent=2))
-        return 0
+            if view is not None:
+                human_status = view.finish()
+        print(
+            json.dumps(summary, sort_keys=True, indent=2), file=sys.stderr if human else sys.stdout
+        )
+        return human_status
     try:
         if args.command == "diff":
             before, after = read_capture(args.baseline), read_capture(args.stimulus)

@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .capture import parse_line
-from .protocol import FAST_PGNS, decode_payload
-from .transport import Reassembler
+from .decoder import PacketDecoder
 
 
 def read_capture(path: Path) -> dict[str, Any]:
@@ -15,7 +14,7 @@ def read_capture(path: Path) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     raw_frames: list[dict[str, Any]] = []
-    assembler = Reassembler()
+    decoder = PacketDecoder()
     for number, line in enumerate(raw.decode("ascii").splitlines(), 1):
         try:
             frame = parse_line(line, number)
@@ -36,18 +35,11 @@ def read_capture(path: Path) -> dict[str, Any]:
                     "payload_hex": frame.data.hex(),
                 }
             )
-            data, frames = frame.data, [frame]
-            if ident.pgn in FAST_PGNS:
-                try:
-                    complete = assembler.feed(frame)
-                finally:
-                    errors.extend(
-                        {"line": number, "error": issue} for issue in assembler.diagnostics
-                    )
-                    assembler.diagnostics.clear()
-                if complete is None:
-                    continue
-                data, frames = complete
+            event = decoder.feed(frame)
+            errors.extend({"line": number, "error": issue} for issue in event.errors)
+            if event.payload is None:
+                continue
+            data, frames = event.payload, event.frames
             record = {
                 "pgn": ident.pgn,
                 "priority": ident.priority,
@@ -68,24 +60,17 @@ def read_capture(path: Path) -> dict[str, Any]:
                     for f in frames
                 ],
             }
-            try:
-                record["decoded"] = decode_payload(ident.pgn, data)
-                record["status"] = (
-                    "decoded"
-                    if ident.pgn in {59392, 59904, 60928, 126464, 126993, 126996, 126998}
-                    else "unknown"
-                )
-            except ValueError as exc:
-                record["status"] = "malformed"
-                record["error"] = str(exc)
-                errors.append({"line": number, "error": str(exc)})
+            record["status"] = event.status
+            if event.decoded is not None:
+                record["decoded"] = event.decoded
+            if event.partial:
+                record["partial_decoded"] = event.partial
+            if event.status == "malformed":
+                record["error"] = event.errors[0]
             records.append(record)
         except ValueError as exc:
             errors.append({"line": number, "error": str(exc)})
-    try:
-        assembler.finish()
-    except ValueError as exc:
-        errors.append({"line": None, "error": str(exc)})
+    errors.extend({"line": None, "error": issue} for issue in decoder.finish())
     for index, record in enumerate(records, 1):
         record["evidence_id"] = f"message-{index}"
         record["timestamp"] = record["frames"][-1]["timestamp"]

@@ -1,7 +1,7 @@
 # Siren 3 Mapper
 
 Python 3.11+ CLI for offline characterization of an owned Siren 3 Pro.
-Phases 0–2 and phases 3–4 software are implemented. Running without a command
+Phases 0–2 and phases 3–4a software are implemented. Running without a command
 prints usage. Offline commands require local files and never open a CAN socket.
 `capture` is strictly passive; `discover` requires explicit transmit opt-in and
 simulator-managed address claiming. No command configures an interface. Physical
@@ -119,3 +119,25 @@ identity on the owned isolated bench, additionally select
 recorded in metadata and retains all interface, claiming and rate checks. See
 [active discovery](docs/active-discovery.md) for the complete procedure and how to
 compare a preserved baseline.
+
+## Human packet interpretation (phase 4a)
+
+```sh
+# Read an existing capture as plain-English frame/message summaries:
+.venv/bin/siren-mapper decode captures/discovery-002.candump --human
+.venv/bin/siren-mapper replay captures/discovery-002.candump --verbose --raw
+# Display a passive capture continuously (existing physical listen-only gates apply):
+.venv/bin/siren-mapper capture --channel can1 --listen-only --isolated-bench --duration 75 --output captures/listen-human-001.candump --human
+```
+
+`--verbose` expands decoded fields and units; `--raw` adds frame/assembled hex.
+Both imply human output. `replay` defaults to human output with no delays;
+`--speed 1` optionally honors recorded timing. Human flags also work on an already
+explicitly selected `discover` run without adding any transmissions.
+
+Live packet text goes to stdout, session logs/summary to stderr. Raw capture and
+metadata files are retained. Unknown/proprietary bytes are not guessed, fast-packet
+fragments remain pending until completion, and errors remain visible without
+terminating live capture. The original seven-byte heartbeat is malformed, with
+its interval/sequence shown only as a labeled known prefix. See the
+[interpreter reference](docs/packet-interpreter.md) for fields, examples and validation.
